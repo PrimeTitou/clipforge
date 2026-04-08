@@ -90,55 +90,51 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-white relative overflow-hidden">
+    <main className="h-screen bg-white relative overflow-hidden flex flex-col">
       <div className="dot-bg" />
 
-      <div className="h-16" />
-
       {/* Hero */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 pt-32 pb-24 text-center">
-        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1">
+      <section className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-3xl w-full mx-auto px-6 text-center">
+        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight leading-[1.05] mb-4 appear-1">
           <span className="gradient-text">Transforme tes VODs</span>
           <br />
           <span className="gradient-text">en Scripts.</span>
         </h1>
 
-        <p className="text-neutral-500 text-lg max-w-xl mx-auto mb-12 appear-2">
+        <p className="text-neutral-500 text-base sm:text-lg max-w-xl mx-auto mb-8 appear-2">
           Upload ta vidéo, laisse l'IA trouver les meilleurs moments
           et générer des scripts prêts à l'emploi.
         </p>
 
-        <div className="appear-3">
+        <div className="appear-3 w-full max-w-2xl">
           {phase === "idle" && <Dropzone getRootProps={getRootProps} getInputProps={getInputProps} isDragActive={isDragActive} />}
           {phase === "uploading" && <UploadingCard pct={uploadPct} />}
           {phase === "processing" && job && <ProcessingCard job={job} />}
           {phase === "error" && <ErrorCard err={err} onReset={reset} />}
           {phase === "done" && <ResultsCard clips={clips} onReset={reset} />}
         </div>
-      </section>
 
-      {/* Features */}
-      {phase === "idle" && (
-        <section className="relative z-10 max-w-4xl mx-auto px-6 pb-24 grid sm:grid-cols-3 gap-4">
-          {[
-            { t: "Transcription rapide", d: "Whisper Large v3 sur GPU Groq", Icon: Zap },
-            { t: "Scoring intelligent", d: "Mots hype, densité, ponctuation", Icon: Target },
-            { t: "Top 10 clips", d: "Les moments les plus forts, triés", Icon: Sparkles },
-          ].map(({ t, d, Icon }) => (
-            <div key={t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-xl p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-teal-50 to-emerald-50 border border-neutral-200 flex items-center justify-center mb-3">
-                <Icon className="w-4 h-4 text-teal-600" strokeWidth={2.25} />
+        {/* Features */}
+        {phase === "idle" && (
+          <div className="w-full max-w-3xl mt-6 grid grid-cols-3 gap-3">
+            {[
+              { t: "Transcription", d: "Whisper Large v3", Icon: Zap },
+              { t: "Scoring", d: "Mots hype, densité", Icon: Target },
+              { t: "Top 10 clips", d: "Les moments forts", Icon: Sparkles },
+            ].map(({ t, d, Icon }) => (
+              <div key={t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-lg p-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-emerald-600" strokeWidth={2.25} />
+                </div>
+                <div className="text-left min-w-0">
+                  <div className="font-semibold text-xs text-neutral-900 truncate">{t}</div>
+                  <div className="text-[10px] text-neutral-500 truncate">{d}</div>
+                </div>
               </div>
-              <div className="font-semibold text-sm text-neutral-900">{t}</div>
-              <div className="text-xs text-neutral-500 mt-1">{d}</div>
-            </div>
-          ))}
-        </section>
-      )}
-
-      <footer className="relative z-10 border-t border-neutral-100 py-6 text-center text-xs text-neutral-400">
-        {BRAND} — built with Supabase + Groq
-      </footer>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   )
 }
@@ -147,16 +143,16 @@ function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
   return (
     <div
       {...getRootProps()}
-      className={`relative rounded-2xl border-2 border-dashed p-14 cursor-pointer transition-all ${
+      className={`relative rounded-2xl border-2 border-dashed p-8 cursor-pointer transition-all ${
         isDragActive
           ? "border-teal-400 bg-teal-50 scale-[1.02]"
           : "border-neutral-200 bg-white/70 backdrop-blur hover:border-neutral-300 hover:bg-white"
       }`}
     >
       <input {...getInputProps()} />
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 border border-neutral-200 flex items-center justify-center">
-          <Upload className="w-6 h-6 text-teal-600" strokeWidth={2.25} />
+      <div className="flex flex-col items-center gap-2">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-100 flex items-center justify-center">
+          <Upload className="w-5 h-5 text-emerald-600" strokeWidth={2.25} />
         </div>
         <div className="font-medium text-neutral-900">
           {isDragActive ? "Lâche ton fichier" : "Glisse ta VOD ou clique"}
