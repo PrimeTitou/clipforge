@@ -1,8 +1,9 @@
 import "./globals.css"
 
 export const metadata = {
-  title: "Clip Fortress — Turn your VODs into best clips",
-  description: "Upload your VOD, get the best highlights automatically.",
+  title: "Clip Fortress — Transforme tes VODs en scripts",
+  description: "Upload ta VOD, récupère un script complet avec angles, hooks et moments clés.",
+  icons: { icon: "/icon.svg" },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
