@@ -1,0 +1,11 @@
+.env
+*.env
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.next/
+storage/
+*.mp4
+*.mp3
+*.mkv
