@@ -52,15 +52,15 @@ body {
 
 .progress-shimmer {
   background: linear-gradient(90deg,
-    rgba(99,102,241,0.9) 0%,
-    rgba(168,85,247,1) 50%,
-    rgba(99,102,241,0.9) 100%);
+    rgba(13,148,136,0.9) 0%,
+    rgba(16,185,129,1) 50%,
+    rgba(13,148,136,0.9) 100%);
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #0a0a0a 0%, #4338ca 60%, #7c3aed 100%);
+  background: linear-gradient(135deg, #0a0a0a 0%, #0f766e 60%, #059669 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

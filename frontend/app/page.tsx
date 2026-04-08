@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { Zap, Target, Sparkles, Film, Upload } from "lucide-react"
+import { Logo } from "@/components/logo"
 import { supabase, type Job, type Clip } from "@/lib/supabase"
 import { fmtTime } from "@/lib/utils"
 
@@ -92,25 +93,23 @@ export default function HomePage() {
     <main className="min-h-screen bg-white relative overflow-hidden">
       <div className="dot-bg" />
 
-      {/* Nav */}
-      <nav className="relative z-10 max-w-6xl mx-auto px-6 py-5 flex items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/30" />
-          <span className="font-bold tracking-tight text-lg text-neutral-900">{BRAND}</span>
-        </div>
-      </nav>
+      {/* Floating logo */}
+      <div className="absolute top-6 left-6 z-20 flex items-center gap-2.5 appear">
+        <Logo size={30} />
+        <span className="font-semibold tracking-tight text-sm text-neutral-900">{BRAND}</span>
+      </div>
 
       {/* Hero */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 pt-20 pb-24 text-center">
-        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1 mt-8">
-          <span className="gradient-text">Turn your VODs</span>
+      <section className="relative z-10 max-w-3xl mx-auto px-6 pt-32 pb-24 text-center">
+        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1">
+          <span className="gradient-text">Transforme tes VODs</span>
           <br />
-          <span className="gradient-text">into best clips.</span>
+          <span className="gradient-text">en Scripts.</span>
         </h1>
 
         <p className="text-neutral-500 text-lg max-w-xl mx-auto mb-12 appear-2">
-          Upload ta vidéo, laisse l'IA trouver les meilleurs moments.
-          Transcription + scoring automatique. Zéro config.
+          Upload ta vidéo, laisse l'IA trouver les meilleurs moments
+          et générer des scripts prêts à l'emploi.
         </p>
 
         <div className="appear-3">
@@ -131,8 +130,8 @@ export default function HomePage() {
             { t: "Top 10 clips", d: "Les moments les plus forts, triés", Icon: Sparkles },
           ].map(({ t, d, Icon }) => (
             <div key={t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-xl p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center mb-3">
-                <Icon className="w-4 h-4 text-indigo-600" strokeWidth={2.25} />
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-teal-50 to-emerald-50 border border-neutral-200 flex items-center justify-center mb-3">
+                <Icon className="w-4 h-4 text-teal-600" strokeWidth={2.25} />
               </div>
               <div className="font-semibold text-sm text-neutral-900">{t}</div>
               <div className="text-xs text-neutral-500 mt-1">{d}</div>
@@ -154,14 +153,14 @@ function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
       {...getRootProps()}
       className={`relative rounded-2xl border-2 border-dashed p-14 cursor-pointer transition-all ${
         isDragActive
-          ? "border-indigo-400 bg-indigo-50 scale-[1.02]"
+          ? "border-teal-400 bg-teal-50 scale-[1.02]"
           : "border-neutral-200 bg-white/70 backdrop-blur hover:border-neutral-300 hover:bg-white"
       }`}
     >
       <input {...getInputProps()} />
       <div className="flex flex-col items-center gap-3">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center">
-          <Upload className="w-6 h-6 text-indigo-600" strokeWidth={2.25} />
+        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 border border-neutral-200 flex items-center justify-center">
+          <Upload className="w-6 h-6 text-teal-600" strokeWidth={2.25} />
         </div>
         <div className="font-medium text-neutral-900">
           {isDragActive ? "Lâche ton fichier" : "Glisse ta VOD ou clique"}
@@ -192,7 +191,7 @@ function ProcessingCard({ job }: { job: Job }) {
     <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-10 shadow-sm">
       <div className="flex justify-between items-center text-sm mb-4">
         <span className="font-medium text-neutral-900 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
           {label}…
         </span>
         <span className="text-neutral-500 font-mono">{job.progress}%</span>
@@ -243,7 +242,7 @@ function ResultsCard({ clips, onReset }: { clips: Clip[]; onReset: () => void })
           <div key={c.id} className="group rounded-xl border border-neutral-200 bg-white/80 backdrop-blur p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center text-xs font-mono font-bold text-neutral-900">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-50 to-emerald-50 border border-neutral-200 flex items-center justify-center text-xs font-mono font-bold text-neutral-900">
                   {i + 1}
                 </div>
                 <div className="font-medium text-sm text-neutral-900">{c.title ?? `Clip ${i + 1}`}</div>
