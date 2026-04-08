@@ -26,7 +26,11 @@ export default function HomePage() {
     setUploadPct(5)
 
     try {
-      const path = `${crypto.randomUUID()}-${file.name}`
+      const safeName = file.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+      const path = `${crypto.randomUUID()}-${safeName}`
       const { error: upErr } = await supabase.storage.from("vods").upload(path, file, {
         contentType: file.type || "video/mp4",
         upsert: false,
