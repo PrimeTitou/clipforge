@@ -93,11 +93,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-white relative overflow-hidden">
       <div className="dot-bg" />
 
-      {/* Floating logo */}
-      <div className="absolute top-6 left-6 z-20 flex items-center gap-2.5 appear">
-        <Logo size={30} />
-        <span className="font-semibold tracking-tight text-sm text-neutral-900">{BRAND}</span>
-      </div>
+      <div className="h-16" />
 
       {/* Hero */}
       <section className="relative z-10 max-w-3xl mx-auto px-6 pt-32 pb-24 text-center">
