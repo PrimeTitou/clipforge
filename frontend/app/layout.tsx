@@ -1,7 +1,7 @@
 import "./globals.css"
 
 export const metadata = {
-  title: "VODCUT — Turn your VODs into best clips",
+  title: "Clip Fortress — Turn your VODs into best clips",
   description: "Upload your VOD, get the best highlights automatically.",
 }
 

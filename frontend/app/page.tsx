@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useDropzone } from "react-dropzone"
+import { Zap, Target, Sparkles, Film, Upload } from "lucide-react"
 import { supabase, type Job, type Clip } from "@/lib/supabase"
 import { fmtTime } from "@/lib/utils"
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error"
 
-const BRAND = "VODCUT"
+const BRAND = "Clip Fortress"
 
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("idle")
@@ -89,31 +90,19 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-white relative overflow-hidden">
-      <div className="glow" />
+      <div className="dot-bg" />
 
       {/* Nav */}
-      <nav className="relative z-10 max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+      <nav className="relative z-10 max-w-6xl mx-auto px-6 py-5 flex items-center">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/30" />
           <span className="font-bold tracking-tight text-lg text-neutral-900">{BRAND}</span>
-        </div>
-        <div className="hidden sm:flex items-center gap-6 text-sm text-neutral-500">
-          <span>AI powered</span>
-          <span className="w-1 h-1 rounded-full bg-neutral-300" />
-          <span>Free</span>
-          <span className="w-1 h-1 rounded-full bg-neutral-300" />
-          <span>No signup</span>
         </div>
       </nav>
 
       {/* Hero */}
       <section className="relative z-10 max-w-3xl mx-auto px-6 pt-20 pb-24 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-200 bg-white/60 backdrop-blur text-xs text-neutral-600 mb-8 appear shadow-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Powered by Groq Whisper Large v3
-        </div>
-
-        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1">
+        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1 mt-8">
           <span className="gradient-text">Turn your VODs</span>
           <br />
           <span className="gradient-text">into best clips.</span>
@@ -137,14 +126,16 @@ export default function HomePage() {
       {phase === "idle" && (
         <section className="relative z-10 max-w-4xl mx-auto px-6 pb-24 grid sm:grid-cols-3 gap-4">
           {[
-            { t: "Transcription rapide", d: "Whisper Large v3 sur GPU Groq", icon: "⚡" },
-            { t: "Scoring intelligent", d: "Mots hype, densité, ponctuation", icon: "🎯" },
-            { t: "Top 10 clips", d: "Les moments les plus forts, triés", icon: "✨" },
-          ].map((f) => (
-            <div key={f.t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-xl p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
-              <div className="text-2xl mb-2">{f.icon}</div>
-              <div className="font-semibold text-sm text-neutral-900">{f.t}</div>
-              <div className="text-xs text-neutral-500 mt-1">{f.d}</div>
+            { t: "Transcription rapide", d: "Whisper Large v3 sur GPU Groq", Icon: Zap },
+            { t: "Scoring intelligent", d: "Mots hype, densité, ponctuation", Icon: Target },
+            { t: "Top 10 clips", d: "Les moments les plus forts, triés", Icon: Sparkles },
+          ].map(({ t, d, Icon }) => (
+            <div key={t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-xl p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center mb-3">
+                <Icon className="w-4 h-4 text-indigo-600" strokeWidth={2.25} />
+              </div>
+              <div className="font-semibold text-sm text-neutral-900">{t}</div>
+              <div className="text-xs text-neutral-500 mt-1">{d}</div>
             </div>
           ))}
         </section>
@@ -169,8 +160,8 @@ function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
     >
       <input {...getInputProps()} />
       <div className="flex flex-col items-center gap-3">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center text-2xl">
-          📼
+        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center">
+          <Upload className="w-6 h-6 text-indigo-600" strokeWidth={2.25} />
         </div>
         <div className="font-medium text-neutral-900">
           {isDragActive ? "Lâche ton fichier" : "Glisse ta VOD ou clique"}
