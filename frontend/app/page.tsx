@@ -6,8 +6,9 @@ import { Zap, Target, Sparkles, Film, Upload } from "lucide-react"
 import { Logo } from "@/components/logo"
 import { supabase, type Job, type Clip } from "@/lib/supabase"
 import { fmtTime } from "@/lib/utils"
+import { extractAndChunkAudio } from "@/lib/ffmpeg"
 
-type Phase = "idle" | "uploading" | "processing" | "done" | "error"
+type Phase = "idle" | "preparing" | "uploading" | "processing" | "done" | "error"
 
 const BRAND = "Clip Fortress"
 
@@ -17,40 +18,69 @@ export default function HomePage() {
   const [clips, setClips] = useState<Clip[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [uploadPct, setUploadPct] = useState(0)
+  const [prepLabel, setPrepLabel] = useState("")
 
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0]
     if (!file) return
     setErr(null)
-    setPhase("uploading")
-    setUploadPct(5)
+    setPhase("preparing")
+    setUploadPct(0)
+    setPrepLabel("Chargement de FFmpeg…")
 
     try {
-      const safeName = file.name
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9._-]/g, "_")
-      const path = `${crypto.randomUUID()}-${safeName}`
-      const { error: upErr } = await supabase.storage.from("vods").upload(path, file, {
-        contentType: file.type || "video/mp4",
-        upsert: false,
+      // 1. Extract audio and chunk it client-side
+      const chunks = await extractAndChunkAudio(file, {
+        chunkSec: 600,
+        onProgress: (pct, label) => {
+          setUploadPct(pct)
+          setPrepLabel(label)
+        },
       })
-      if (upErr) throw upErr
-      setUploadPct(100)
+      if (chunks.length === 0) throw new Error("No audio extracted")
 
+      // 2. Create a job row
+      const jobId = crypto.randomUUID()
+      const prefix = `${jobId}`
+      const chunkPaths: { path: string; offset: number }[] = []
+
+      // 3. Upload each chunk to Storage
+      setPhase("uploading")
+      setPrepLabel("Upload des chunks…")
+      for (let i = 0; i < chunks.length; i++) {
+        const c = chunks[i]
+        const chunkPath = `${prefix}/chunk_${String(i).padStart(3, "0")}.mp3`
+        const blob = new Blob([c.data], { type: "audio/mpeg" })
+        const { error: upErr } = await supabase.storage.from("vods").upload(chunkPath, blob, {
+          contentType: "audio/mpeg",
+          upsert: false,
+        })
+        if (upErr) throw upErr
+        chunkPaths.push({ path: chunkPath, offset: c.offsetSec })
+        setUploadPct(Math.round(((i + 1) / chunks.length) * 100))
+      }
+
+      // 4. Insert job row with chunk list
       const { data: jobRow, error: jobErr } = await supabase
         .from("jobs")
-        .insert({ storage_path: path, filename: file.name, status: "pending", progress: 5 })
+        .insert({
+          id: jobId,
+          storage_path: prefix,
+          filename: file.name,
+          status: "pending",
+          progress: 5,
+        })
         .select()
         .single()
       if (jobErr || !jobRow) throw jobErr ?? new Error("job insert failed")
       setJob(jobRow as Job)
       setPhase("processing")
 
-      supabase.functions.invoke("process-vod", { body: { job_id: jobRow.id } }).catch((e) => {
-        console.error("invoke error", e)
-      })
+      supabase.functions
+        .invoke("process-vod", { body: { job_id: jobId, chunks: chunkPaths } })
+        .catch((e) => console.error("invoke error", e))
     } catch (e: any) {
+      console.error(e)
       setErr(e.message ?? String(e))
       setPhase("error")
     }
@@ -112,7 +142,8 @@ export default function HomePage() {
 
         <div className="appear-3 w-full max-w-2xl">
           {phase === "idle" && <Dropzone getRootProps={getRootProps} getInputProps={getInputProps} isDragActive={isDragActive} />}
-          {phase === "uploading" && <UploadingCard pct={uploadPct} />}
+          {phase === "preparing" && <UploadingCard pct={uploadPct} label={prepLabel} />}
+          {phase === "uploading" && <UploadingCard pct={uploadPct} label={prepLabel || "Upload en cours…"} />}
           {phase === "processing" && job && <ProcessingCard job={job} />}
           {phase === "error" && <ErrorCard err={err} onReset={reset} />}
           {phase === "done" && <ResultsCard clips={clips} onReset={reset} />}
@@ -167,10 +198,13 @@ function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
   )
 }
 
-function UploadingCard({ pct }: { pct: number }) {
+function UploadingCard({ pct, label }: { pct: number; label: string }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-10 shadow-sm">
-      <div className="text-sm text-neutral-500 mb-4">Upload en cours…</div>
+    <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-8 shadow-sm">
+      <div className="flex justify-between text-sm mb-3">
+        <span className="text-neutral-700 font-medium">{label}</span>
+        <span className="text-neutral-500 font-mono">{Math.round(pct)}%</span>
+      </div>
       <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
         <div className="h-full progress-shimmer transition-all" style={{ width: `${pct}%` }} />
       </div>
