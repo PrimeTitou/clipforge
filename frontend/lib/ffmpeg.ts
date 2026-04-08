@@ -74,10 +74,10 @@ export async function extractAndChunkAudio(
   progress(75, "Découpage…")
 
   // List produced files
-  const files = await ff.listDir("/")
-  const chunkFiles = files
+  const files: any = await ff.listDir("/")
+  const chunkFiles: string[] = (files as any[])
     .filter((f: any) => !f.isDir && /^chunk_\d+\.mp3$/.test(f.name))
-    .map((f: any) => f.name)
+    .map((f: any) => f.name as string)
     .sort()
 
   const chunks: AudioChunk[] = []
