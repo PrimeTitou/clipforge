@@ -7,6 +7,8 @@ import { fmtTime } from "@/lib/utils"
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error"
 
+const BRAND = "VODCUT"
+
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("idle")
   const [job, setJob] = useState<Job | null>(null)
@@ -19,7 +21,7 @@ export default function HomePage() {
     if (!file) return
     setErr(null)
     setPhase("uploading")
-    setUploadPct(0)
+    setUploadPct(5)
 
     try {
       const path = `${crypto.randomUUID()}-${file.name}`
@@ -86,100 +88,186 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-gray-900">
-      <nav className="border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-        <span className="font-semibold text-lg">● ClipFortress</span>
-        <span className="text-sm text-gray-500">Upload → Best clips</span>
+    <main className="min-h-screen bg-white relative overflow-hidden">
+      <div className="glow" />
+
+      {/* Nav */}
+      <nav className="relative z-10 max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/30" />
+          <span className="font-bold tracking-tight text-lg text-neutral-900">{BRAND}</span>
+        </div>
+        <div className="hidden sm:flex items-center gap-6 text-sm text-neutral-500">
+          <span>AI powered</span>
+          <span className="w-1 h-1 rounded-full bg-neutral-300" />
+          <span>Free</span>
+          <span className="w-1 h-1 rounded-full bg-neutral-300" />
+          <span>No signup</span>
+        </div>
       </nav>
 
-      <section className="max-w-2xl mx-auto px-4 pt-24 pb-16">
-        <h1 className="text-4xl font-semibold mb-3 text-center leading-tight">
-          Découpe ta VOD en<br />meilleurs moments.
+      {/* Hero */}
+      <section className="relative z-10 max-w-3xl mx-auto px-6 pt-20 pb-24 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-200 bg-white/60 backdrop-blur text-xs text-neutral-600 mb-8 appear shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Powered by Groq Whisper Large v3
+        </div>
+
+        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.05] mb-6 appear-1">
+          <span className="gradient-text">Turn your VODs</span>
+          <br />
+          <span className="gradient-text">into best clips.</span>
         </h1>
-        <p className="text-gray-500 text-center mb-10">
-          Upload ta vidéo, on te sort les top clips automatiquement.
+
+        <p className="text-neutral-500 text-lg max-w-xl mx-auto mb-12 appear-2">
+          Upload ta vidéo, laisse l'IA trouver les meilleurs moments.
+          Transcription + scoring automatique. Zéro config.
         </p>
 
-        {phase === "idle" && (
-          <div
-            {...getRootProps()}
-            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-              isDragActive ? "border-indigo-500 bg-indigo-50" : "border-gray-300 hover:border-gray-400"
-            }`}
-          >
-            <input {...getInputProps()} />
-            <div className="text-4xl mb-3">📼</div>
-            <div className="font-medium">
-              {isDragActive ? "Lâche le fichier" : "Glisse ta VOD ici ou clique"}
-            </div>
-            <div className="text-sm text-gray-500 mt-1">video/audio · max 5 Go</div>
-          </div>
-        )}
-
-        {phase === "uploading" && (
-          <div className="border border-gray-200 rounded-xl p-8 text-center">
-            <div className="text-sm text-gray-500 mb-3">Upload en cours…</div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 transition-all" style={{ width: `${uploadPct}%` }} />
-            </div>
-          </div>
-        )}
-
-        {phase === "processing" && job && (
-          <div className="border border-gray-200 rounded-xl p-8">
-            <div className="flex justify-between text-sm mb-3">
-              <span className="font-medium capitalize">{job.status}…</span>
-              <span className="text-gray-500">{job.progress}%</span>
-            </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 transition-all" style={{ width: `${job.progress}%` }} />
-            </div>
-            <div className="text-xs text-gray-400 mt-4 text-center">
-              Transcription + détection en cours, ça peut prendre quelques minutes.
-            </div>
-          </div>
-        )}
-
-        {phase === "error" && (
-          <div className="border border-red-200 bg-red-50 rounded-xl p-6">
-            <div className="text-red-700 text-sm font-medium mb-2">Erreur</div>
-            <div className="text-red-600 text-sm mb-4">{err}</div>
-            <button onClick={reset} className="text-sm underline">Réessayer</button>
-          </div>
-        )}
-
-        {phase === "done" && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-semibold">{clips.length} clips détectés</h2>
-              <button onClick={reset} className="text-sm text-gray-500 hover:text-gray-900 underline">
-                Nouvelle VOD
-              </button>
-            </div>
-            {clips.length === 0 && (
-              <div className="text-sm text-gray-500 text-center py-8">
-                Aucun clip trouvé. Essaie une VOD plus longue ou plus animée.
-              </div>
-            )}
-            <div className="space-y-3">
-              {clips.map((c, i) => (
-                <div key={c.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="font-medium text-sm">#{i + 1} · {c.title}</div>
-                    <div className="text-xs text-gray-500 font-mono">
-                      {fmtTime(c.start_sec)} → {fmtTime(c.end_sec)}
-                    </div>
-                  </div>
-                  {c.transcript && (
-                    <div className="text-sm text-gray-600 line-clamp-3">{c.transcript}</div>
-                  )}
-                  <div className="text-xs text-gray-400 mt-2">score {c.score.toFixed(1)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="appear-3">
+          {phase === "idle" && <Dropzone getRootProps={getRootProps} getInputProps={getInputProps} isDragActive={isDragActive} />}
+          {phase === "uploading" && <UploadingCard pct={uploadPct} />}
+          {phase === "processing" && job && <ProcessingCard job={job} />}
+          {phase === "error" && <ErrorCard err={err} onReset={reset} />}
+          {phase === "done" && <ResultsCard clips={clips} onReset={reset} />}
+        </div>
       </section>
+
+      {/* Features */}
+      {phase === "idle" && (
+        <section className="relative z-10 max-w-4xl mx-auto px-6 pb-24 grid sm:grid-cols-3 gap-4">
+          {[
+            { t: "Transcription rapide", d: "Whisper Large v3 sur GPU Groq", icon: "⚡" },
+            { t: "Scoring intelligent", d: "Mots hype, densité, ponctuation", icon: "🎯" },
+            { t: "Top 10 clips", d: "Les moments les plus forts, triés", icon: "✨" },
+          ].map((f) => (
+            <div key={f.t} className="border border-neutral-200 bg-white/70 backdrop-blur rounded-xl p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
+              <div className="text-2xl mb-2">{f.icon}</div>
+              <div className="font-semibold text-sm text-neutral-900">{f.t}</div>
+              <div className="text-xs text-neutral-500 mt-1">{f.d}</div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <footer className="relative z-10 border-t border-neutral-100 py-6 text-center text-xs text-neutral-400">
+        {BRAND} — built with Supabase + Groq
+      </footer>
     </main>
+  )
+}
+
+function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
+  return (
+    <div
+      {...getRootProps()}
+      className={`relative rounded-2xl border-2 border-dashed p-14 cursor-pointer transition-all ${
+        isDragActive
+          ? "border-indigo-400 bg-indigo-50 scale-[1.02]"
+          : "border-neutral-200 bg-white/70 backdrop-blur hover:border-neutral-300 hover:bg-white"
+      }`}
+    >
+      <input {...getInputProps()} />
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center text-2xl">
+          📼
+        </div>
+        <div className="font-medium text-neutral-900">
+          {isDragActive ? "Lâche ton fichier" : "Glisse ta VOD ou clique"}
+        </div>
+        <div className="text-xs text-neutral-500">video / audio · jusqu'à 5 Go</div>
+      </div>
+    </div>
+  )
+}
+
+function UploadingCard({ pct }: { pct: number }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-10 shadow-sm">
+      <div className="text-sm text-neutral-500 mb-4">Upload en cours…</div>
+      <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+        <div className="h-full progress-shimmer transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function ProcessingCard({ job }: { job: Job }) {
+  const label =
+    job.status === "transcribing" ? "Transcription avec Whisper" :
+    job.status === "detecting" ? "Détection des meilleurs moments" :
+    "Préparation"
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-10 shadow-sm">
+      <div className="flex justify-between items-center text-sm mb-4">
+        <span className="font-medium text-neutral-900 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+          {label}…
+        </span>
+        <span className="text-neutral-500 font-mono">{job.progress}%</span>
+      </div>
+      <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+        <div className="h-full progress-shimmer transition-all duration-500" style={{ width: `${job.progress}%` }} />
+      </div>
+      <div className="text-xs text-neutral-400 mt-6 text-center">
+        Ça peut prendre quelques minutes selon la durée de la VOD.
+      </div>
+    </div>
+  )
+}
+
+function ErrorCard({ err, onReset }: { err: string | null; onReset: () => void }) {
+  return (
+    <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-left">
+      <div className="text-red-700 text-sm font-semibold mb-2">Erreur</div>
+      <div className="text-red-600/80 text-xs mb-4 font-mono break-all">{err}</div>
+      <button onClick={onReset} className="text-sm px-4 py-2 rounded-lg border border-red-200 bg-white hover:bg-red-100 transition-colors">
+        Réessayer
+      </button>
+    </div>
+  )
+}
+
+function ResultsCard({ clips, onReset }: { clips: Clip[]; onReset: () => void }) {
+  return (
+    <div className="text-left">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="font-bold text-xl text-neutral-900">{clips.length} clips détectés</h2>
+          <p className="text-xs text-neutral-500 mt-1">Triés par ordre chronologique</p>
+        </div>
+        <button onClick={onReset} className="text-sm px-4 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 transition-colors">
+          Nouvelle VOD
+        </button>
+      </div>
+
+      {clips.length === 0 && (
+        <div className="text-sm text-neutral-500 text-center py-16 border border-neutral-200 rounded-xl bg-white/70">
+          Aucun clip détecté. Essaie une VOD plus longue ou plus animée.
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {clips.map((c, i) => (
+          <div key={c.id} className="group rounded-xl border border-neutral-200 bg-white/80 backdrop-blur p-5 hover:border-neutral-300 hover:shadow-sm transition-all">
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 border border-neutral-200 flex items-center justify-center text-xs font-mono font-bold text-neutral-900">
+                  {i + 1}
+                </div>
+                <div className="font-medium text-sm text-neutral-900">{c.title ?? `Clip ${i + 1}`}</div>
+              </div>
+              <div className="text-xs text-neutral-500 font-mono">
+                {fmtTime(c.start_sec)} → {fmtTime(c.end_sec)}
+              </div>
+            </div>
+            {c.transcript && (
+              <div className="text-sm text-neutral-600 line-clamp-3 pl-11">{c.transcript}</div>
+            )}
+            <div className="text-xs text-neutral-400 mt-3 pl-11 font-mono">score {c.score.toFixed(1)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

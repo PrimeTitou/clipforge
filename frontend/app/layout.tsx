@@ -1,8 +1,8 @@
 import "./globals.css"
 
 export const metadata = {
-  title: "ClipFortress",
-  description: "Découpe ta VOD en meilleurs moments automatiquement.",
+  title: "VODCUT — Turn your VODs into best clips",
+  description: "Upload your VOD, get the best highlights automatically.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
