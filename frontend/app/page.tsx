@@ -41,10 +41,10 @@ export default function HomePage() {
       setPrepLabel("Upload des chunks…")
       for (let i = 0; i < chunks.length; i++) {
         const c = chunks[i]
-        const chunkPath = `${prefix}/chunk_${String(i).padStart(3, "0")}.wav`
-        const blob = new Blob([c.data], { type: "audio/wav" })
+        const chunkPath = `${prefix}/chunk_${String(i).padStart(3, "0")}.aac`
+        const blob = new Blob([c.data], { type: "audio/aac" })
         const { error: upErr } = await supabase.storage.from("vods").upload(chunkPath, blob, {
-          contentType: "audio/wav",
+          contentType: "audio/aac",
           upsert: false,
         })
         if (upErr) throw upErr

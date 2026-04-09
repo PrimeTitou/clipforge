@@ -8,8 +8,8 @@ export interface AudioChunk {
 const CHUNK_SEC = 600 // 10 min per chunk
 
 /**
- * Extract audio from a video file using WebCodecs + MP4Box streaming.
- * Reads the file in small slices — never loads the full file into RAM.
+ * Extract audio from a video file using MP4Box — streams raw AAC samples,
+ * no decoding, packages them into ADTS .aac chunks. Never loads full file.
  */
 export async function extractAndChunkAudio(
   file: File,
@@ -28,17 +28,16 @@ export async function extractAndChunkAudio(
 
   return new Promise((resolve, reject) => {
     const mp4 = MP4Box.createFile()
-    const targetSampleRate = 16000
 
     let audioTrackId: number | null = null
-    let audioDecoder: AudioDecoder | null = null
-    let allSamples: Float32Array[] = []
-    let totalSamples = 0
-    let decodePending = 0
-    let samplesReceived = 0
-    let feedDone = false
+    let sampleRate = 48000
+    let channelCount = 2
+    let timescale = 1
+    let codecConfig: Uint8Array | null = null
+
+    // All raw AAC samples collected
+    const rawSamples: Array<{ data: Uint8Array; dts: number; duration: number }> = []
     let readyFired = false
-    let sourceSampleRate = 48000
     let finalized = false
 
     const fail = (msg: string) => {
@@ -53,80 +52,50 @@ export async function extractAndChunkAudio(
       if (!audioTrack) { fail("Aucun flux audio trouvé dans le fichier."); return }
 
       audioTrackId = audioTrack.id
-      sourceSampleRate = audioTrack.audio?.sample_rate ?? 48000
-      progress(62, `Audio détecté (${audioTrack.codec})…`)
+      sampleRate = audioTrack.audio?.sample_rate ?? 48000
+      channelCount = audioTrack.audio?.channel_count ?? 2
+      timescale = audioTrack.timescale ?? sampleRate
 
-      try {
-        audioDecoder = new AudioDecoder({
-          output: (audioData: AudioData) => {
-            const buf = new Float32Array(audioData.numberOfFrames * (audioData.numberOfChannels || 1))
-            try {
-              audioData.copyTo(buf, { planeIndex: 0, format: "f32-planar" })
-            } catch {
-              try { audioData.copyTo(buf, { planeIndex: 0 }) } catch {}
-            }
-            const mono = audioData.numberOfFrames === buf.length ? buf : buf.subarray(0, audioData.numberOfFrames)
-            allSamples.push(new Float32Array(mono))
-            totalSamples += mono.length
-            audioData.close()
-            decodePending--
-            if (feedDone && decodePending === 0) finalize()
-          },
-          error: (e: any) => fail(`AudioDecoder error: ${e?.message ?? e}`),
-        })
-
-        audioDecoder.configure({
-          codec: audioTrack.codec,
-          sampleRate: sourceSampleRate,
-          numberOfChannels: audioTrack.audio?.channel_count ?? 2,
-        })
-      } catch (e: any) {
-        fail(`Impossible de configurer le décodeur audio: ${e?.message ?? e}`)
-        return
+      // Get codec extradata (ESDS / AudioSpecificConfig) for ADTS header
+      const trak = (mp4 as any).moov?.traks?.find((t: any) => t.tkhd?.track_id === audioTrackId)
+      const esds = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.esds
+      if (esds?.esd?.ES_Descriptor?.decoderConfig?.decoderSpecificInfo?.data) {
+        codecConfig = new Uint8Array(esds.esd.ES_Descriptor.decoderConfig.decoderSpecificInfo.data)
       }
 
-      mp4.setExtractionOptions(audioTrackId!, null, { nbSamples: 100 })
+      progress(62, `Audio détecté (${audioTrack.codec}, ${sampleRate}Hz)…`)
+      mp4.setExtractionOptions(audioTrackId!, null, { nbSamples: 200 })
       mp4.start()
     }
 
     mp4.onSamples = (_id: number, _user: any, samples: any[]) => {
-      samplesReceived += samples.length
-      for (const sample of samples) {
-        decodePending++
-        try {
-          audioDecoder!.decode(new EncodedAudioChunk({
-            type: sample.is_sync ? "key" : "delta",
-            timestamp: (sample.cts * 1_000_000) / sample.timescale,
-            duration: (sample.duration * 1_000_000) / sample.timescale,
-            data: sample.data,
-          }))
-        } catch (e: any) {
-          decodePending--
-          fail(`Decode error: ${e?.message ?? e}`)
-          return
-        }
+      for (const s of samples) {
+        rawSamples.push({
+          data: new Uint8Array(s.data),
+          dts: s.dts,
+          duration: s.duration,
+        })
       }
-      if (feedDone) {
-        progress(68, `Décodage audio… (${samplesReceived} samples)`)
-      }
+      progress(
+        5 + Math.round((rawSamples.length / Math.max(1, rawSamples.length + 100)) * 55),
+        `Extraction audio… (${rawSamples.length} frames)`
+      )
     }
 
-    mp4.onFlush = async () => {
-      feedDone = true
+    mp4.onFlush = () => {
       if (!readyFired) {
-        fail("Fichier MP4 illisible : le moov atom est introuvable ou corrompu. Essaie de remuxer avec HandBrake ou: ffmpeg -i input.mp4 -c copy -movflags +faststart output.mp4")
+        fail("Fichier MP4 illisible : moov introuvable. Remuxe avec: ffmpeg -i input.mp4 -c copy -movflags +faststart output.mp4")
         return
       }
-      // Flush the AudioDecoder to drain any buffered frames
-      if (audioDecoder && audioDecoder.state !== "closed") {
-        try { await audioDecoder.flush() } catch {}
+      if (rawSamples.length === 0) {
+        fail("Aucun sample audio extrait du fichier.")
+        return
       }
       finalize()
     }
 
     mp4.onError = (e: any) => fail(`MP4Box error: ${e}`)
 
-    // Feed file in 4MB slices
     const SLICE = 4 * 1024 * 1024
     let offset = 0
 
@@ -148,65 +117,52 @@ export async function extractAndChunkAudio(
       }
       offset = end
       const pct = 5 + Math.round((offset / file.size) * 55)
-      progress(pct, readyFired ? `Extraction audio… (${samplesReceived} samples)` : "Lecture fichier… (recherche du moov)")
+      progress(pct, readyFired ? `Extraction audio… (${rawSamples.length} frames)` : "Lecture fichier… (recherche du moov)")
       setTimeout(feedNext, 0)
     }
 
-    // Safety watchdog: if nothing decoded after feed is done, bail out
-    const watchdog = setInterval(() => {
-      if (finalized) { clearInterval(watchdog); return }
-      if (feedDone && readyFired && samplesReceived === 0) {
-        clearInterval(watchdog)
-        fail("Aucun sample audio extrait. Le fichier est peut-être fragmenté ou utilise un codec non supporté.")
-      }
-    }, 5000)
-
     feedNext()
 
-    const finalize = async () => {
+    const finalize = () => {
       if (finalized) return
       finalized = true
-      clearInterval(watchdog)
 
-      try { if (audioDecoder && audioDecoder.state !== "closed") await audioDecoder.flush() } catch {}
+      progress(65, "Découpage en chunks…")
 
-      if (totalSamples === 0) {
-        reject(new Error("Aucun échantillon audio décodé."))
-        return
-      }
-
-      progress(65, "Assemblage audio…")
-
-      const merged = new Float32Array(totalSamples)
-      let pos = 0
-      for (const s of allSamples) { merged.set(s, pos); pos += s.length }
-      allSamples = []
-
-      const resampledLength = Math.ceil(totalSamples * (targetSampleRate / sourceSampleRate))
-      const resampled = new Float32Array(resampledLength)
-      const ratio = totalSamples / resampledLength
-      for (let i = 0; i < resampledLength; i++) {
-        resampled[i] = merged[Math.min(Math.floor(i * ratio), totalSamples - 1)]
-      }
-
-      progress(75, "Découpage en chunks…")
-
-      const samplesPerChunk = chunkSec * targetSampleRate
-      const numChunks = Math.max(1, Math.ceil(resampled.length / samplesPerChunk))
+      // Split samples into time-based chunks
+      const totalDurationSec = rawSamples.reduce((acc, s) => acc + s.duration / timescale, 0)
+      const numChunks = Math.max(1, Math.ceil(totalDurationSec / chunkSec))
       const chunks: AudioChunk[] = []
 
-      for (let i = 0; i < numChunks; i++) {
-        const start = i * samplesPerChunk
-        const end = Math.min(start + samplesPerChunk, resampled.length)
-        const slice = resampled.slice(start, end)
+      // Group samples by chunk
+      let chunkIdx = 0
+      let chunkStart = 0
+      let chunkSamples: typeof rawSamples = []
+
+      const flush = (idx: number, startSec: number) => {
+        if (chunkSamples.length === 0) return
+        const dur = chunkSamples.reduce((a, s) => a + s.duration / timescale, 0)
         chunks.push({
-          data: encodeWav(slice, targetSampleRate),
-          offsetSec: i * chunkSec,
-          durationSec: (end - start) / targetSampleRate,
-          index: i,
+          data: buildAdts(chunkSamples, sampleRate, channelCount, codecConfig),
+          offsetSec: startSec,
+          durationSec: dur,
+          index: idx,
         })
-        progress(75 + Math.round(((i + 1) / numChunks) * 20), `Chunk ${i + 1}/${numChunks}…`)
+        progress(65 + Math.round(((idx + 1) / numChunks) * 30), `Chunk ${idx + 1}/${numChunks}…`)
       }
+
+      let elapsed = 0
+      for (const s of rawSamples) {
+        chunkSamples.push(s)
+        elapsed += s.duration / timescale
+        if (elapsed >= chunkSec * (chunkIdx + 1)) {
+          flush(chunkIdx, chunkStart)
+          chunkStart = elapsed
+          chunkIdx++
+          chunkSamples = []
+        }
+      }
+      flush(chunkIdx, chunkStart)
 
       progress(100, "Prêt")
       resolve(chunks)
@@ -214,20 +170,42 @@ export async function extractAndChunkAudio(
   })
 }
 
-function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
-  const dataSize = samples.length * 2
-  const buf = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buf)
-  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)) }
-  w(0, "RIFF"); view.setUint32(4, 36 + dataSize, true); w(8, "WAVE")
-  w(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true)
-  view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true)
-  view.setUint16(34, 16, true); w(36, "data"); view.setUint32(40, dataSize, true)
-  let o = 44
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(o, s < 0 ? s * 32768 : s * 32767, true); o += 2
+/**
+ * Pack raw AAC frames into an ADTS bitstream (.aac file).
+ * Each frame gets a 7-byte ADTS header prepended.
+ */
+function buildAdts(
+  samples: Array<{ data: Uint8Array }>,
+  sampleRate: number,
+  channels: number,
+  _codecConfig: Uint8Array | null
+): Uint8Array {
+  const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350]
+  const rateIdx = ADTS_RATES.indexOf(sampleRate)
+  const freqIdx = rateIdx >= 0 ? rateIdx : 4 // default 44100
+  const chanConf = Math.min(channels, 7)
+  const profile = 1 // AAC-LC
+
+  // Total size
+  let total = 0
+  for (const s of samples) total += 7 + s.data.length
+  const out = new Uint8Array(total)
+  let pos = 0
+
+  for (const s of samples) {
+    const frameLen = 7 + s.data.length
+    // ADTS header (7 bytes, no CRC)
+    out[pos]     = 0xFF
+    out[pos + 1] = 0xF1 // ID=0 (MPEG-4), layer=0, no CRC
+    out[pos + 2] = ((profile & 0x3) << 6) | ((freqIdx & 0xF) << 2) | ((chanConf >> 2) & 0x1)
+    out[pos + 3] = ((chanConf & 0x3) << 6) | ((frameLen >> 11) & 0x3)
+    out[pos + 4] = (frameLen >> 3) & 0xFF
+    out[pos + 5] = ((frameLen & 0x7) << 5) | 0x1F
+    out[pos + 6] = 0xFC
+    pos += 7
+    out.set(s.data, pos)
+    pos += s.data.length
   }
-  return new Uint8Array(buf)
+
+  return out
 }
