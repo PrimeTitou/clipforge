@@ -15,6 +15,7 @@ export type Job = {
   title: string | null
   script: string | null
   transcript: string | null
+  rate_limit_until: string | null
   created_at: string
   updated_at: string
 }

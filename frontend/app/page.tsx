@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { Zap, Target, Sparkles, Upload, FileText, Copy, Check, AlignLeft, Crosshair, Lightbulb, Anchor, MapPin, MessageSquare, Shuffle, PenLine } from "lucide-react"
 import { supabase, type Job } from "@/lib/supabase"
@@ -214,25 +214,55 @@ function UploadingCard({ pct, label }: { pct: number; label: string }) {
   )
 }
 
+function useCountdown(until: string | null) {
+  const [secs, setSecs] = useState(0)
+  const ref = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!until) { setSecs(0); return }
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000))
+      setSecs(remaining)
+    }
+    tick()
+    ref.current = setInterval(tick, 500)
+    return () => { if (ref.current) clearInterval(ref.current) }
+  }, [until])
+
+  return secs
+}
+
 function ProcessingCard({ job }: { job: Job }) {
+  const countdown = useCountdown(job.rate_limit_until ?? null)
+  const isRateLimited = !!job.rate_limit_until && countdown > 0
+
   const label =
+    isRateLimited ? "Limite Groq atteinte — reprise dans" :
     job.status === "transcribing" ? "Transcription avec Whisper" :
     job.status === "writing" ? "Génération du script avec Llama" :
     "Préparation"
+
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-8 shadow-sm">
       <div className="flex justify-between items-center text-sm mb-3">
-        <span className="font-medium text-neutral-900 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          {label}…
+        <span className={`font-medium flex items-center gap-2 ${isRateLimited ? "text-amber-600" : "text-neutral-900"}`}>
+          <span className={`w-2 h-2 rounded-full ${isRateLimited ? "bg-amber-400 animate-pulse" : "bg-emerald-500 animate-pulse"}`} />
+          {label}{isRateLimited ? "" : "…"}
         </span>
-        <span className="text-neutral-500 font-mono">{job.progress}%</span>
+        <span className={`font-mono text-sm ${isRateLimited ? "text-amber-600 tabular-nums" : "text-neutral-500"}`}>
+          {isRateLimited ? `${countdown}s` : `${job.progress}%`}
+        </span>
       </div>
       <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-        <div className="h-full progress-shimmer transition-all duration-500" style={{ width: `${job.progress}%` }} />
+        <div
+          className={`h-full transition-all duration-500 ${isRateLimited ? "bg-amber-300" : "progress-shimmer"}`}
+          style={{ width: isRateLimited ? "100%" : `${job.progress}%` }}
+        />
       </div>
       <div className="text-xs text-neutral-400 mt-4 text-center">
-        Ça peut prendre quelques minutes selon la durée de la VOD.
+        {isRateLimited
+          ? "Whisper Large v3 est en rate limit. Reprise automatique."
+          : "Ça peut prendre quelques minutes selon la durée de la VOD."}
       </div>
     </div>
   )
