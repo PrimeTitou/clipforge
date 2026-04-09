@@ -111,8 +111,17 @@ export async function extractAndChunkAudio(
       }
     }
 
-    mp4.onFlush = () => {
-      if (decodePending === 0) finalize()
+    mp4.onFlush = async () => {
+      feedDone = true
+      if (!readyFired) {
+        fail("Fichier MP4 illisible : le moov atom est introuvable ou corrompu. Essaie de remuxer avec HandBrake ou: ffmpeg -i input.mp4 -c copy -movflags +faststart output.mp4")
+        return
+      }
+      // Flush the AudioDecoder to drain any buffered frames
+      if (audioDecoder && audioDecoder.state !== "closed") {
+        try { await audioDecoder.flush() } catch {}
+      }
+      finalize()
     }
 
     mp4.onError = (e: any) => fail(`MP4Box error: ${e}`)
@@ -124,17 +133,7 @@ export async function extractAndChunkAudio(
     const feedNext = async () => {
       if (finalized) return
       if (offset >= file.size) {
-        feedDone = true
-        if (!readyFired) {
-          fail("Fichier MP4 illisible : le moov atom est introuvable ou corrompu. Essaie de remuxer le fichier (ex: HandBrake ou ffmpeg -c copy).")
-          return
-        }
         try { mp4.flush() } catch {}
-        // Wait for decoder to drain
-        if (audioDecoder && decodePending > 0) {
-          try { await audioDecoder.flush() } catch {}
-        }
-        if (decodePending === 0) finalize()
         return
       }
       const end = Math.min(offset + SLICE, file.size)
