@@ -23,8 +23,9 @@ export async function extractAndChunkAudio(
 
   progress(5, "Chargement du démuxeur…")
 
-  // Dynamic import to avoid SSR issues
-  const MP4Box = (await import("mp4box")).default
+  // Dynamic import — mp4box exports differ between CJS/ESM builds
+  const mp4boxMod = await import("mp4box")
+  const MP4Box = mp4boxMod.default ?? mp4boxMod
 
   return new Promise((resolve, reject) => {
     const mp4 = MP4Box.createFile()
