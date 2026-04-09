@@ -5,10 +5,11 @@ export interface AudioChunk {
   index: number
 }
 
+const CHUNK_SEC = 600 // 10 min per chunk
+
 /**
- * Extract audio from a video/audio file using the Web Audio API (no FFmpeg.wasm).
- * Decodes the file natively in the browser, converts to mono 16kHz, encodes to WAV,
- * and splits into chunks. Works with any format Chrome supports (mp4, mov, mkv, webm, etc.)
+ * Extract audio from a video file using WebCodecs + MP4Box streaming.
+ * Reads the file in small slices — never loads the full file into RAM.
  */
 export async function extractAndChunkAudio(
   file: File,
@@ -17,127 +18,153 @@ export async function extractAndChunkAudio(
     onProgress?: (pct: number, label: string) => void
   } = {}
 ): Promise<AudioChunk[]> {
-  const chunkSec = opts.chunkSec ?? 600
+  const chunkSec = opts.chunkSec ?? CHUNK_SEC
   const progress = opts.onProgress ?? (() => {})
 
-  progress(5, "Décodage audio…")
+  progress(5, "Chargement du démuxeur…")
 
-  // Decode using Web Audio API — streams via slice to avoid full OOM
-  const audioCtx = new AudioContext({ sampleRate: 16000 })
+  // Dynamic import to avoid SSR issues
+  const MP4Box = (await import("mp4box")).default
 
-  // Read file in slices of 256MB max to avoid ArrayBuffer allocation errors
-  const SLICE = 256 * 1024 * 1024
-  let audioBuffer: AudioBuffer
+  return new Promise((resolve, reject) => {
+    const mp4 = MP4Box.createFile()
+    const sampleRate = 16000
 
-  if (file.size <= SLICE) {
-    const arrayBuf = await file.arrayBuffer()
-    progress(20, "Décodage audio…")
-    audioBuffer = await audioCtx.decodeAudioData(arrayBuf)
-  } else {
-    // For large files, try reading the whole thing via streaming
-    // Chrome can handle decodeAudioData on large buffers if given as a single call
-    // We slice-read to avoid the single alloc error, then concat
-    const parts: ArrayBuffer[] = []
-    let loaded = 0
-    for (let offset = 0; offset < file.size; offset += SLICE) {
-      const slice = file.slice(offset, Math.min(offset + SLICE, file.size))
-      parts.push(await slice.arrayBuffer())
-      loaded += Math.min(SLICE, file.size - offset)
-      progress(5 + Math.round((loaded / file.size) * 15), "Lecture du fichier…")
+    let audioTrackId: number | null = null
+    let audioDecoder: AudioDecoder | null = null
+    let allSamples: Float32Array[] = []
+    let totalSamples = 0
+    let decodePending = 0
+    let extractionDone = false
+
+    // When MP4Box finds tracks
+    mp4.onReady = (info: any) => {
+      const audioTrack = info.tracks?.find((t: any) => t.type === "audio")
+      if (!audioTrack) { reject(new Error("Aucun flux audio trouvé dans le fichier.")); return }
+
+      audioTrackId = audioTrack.id
+
+      audioDecoder = new AudioDecoder({
+        output: (audioData: AudioData) => {
+          // Copy decoded audio to Float32Array
+          const buf = new Float32Array(audioData.numberOfFrames)
+          audioData.copyTo(buf, { planeIndex: 0, format: "f32-planar" })
+          allSamples.push(buf)
+          totalSamples += buf.length
+          audioData.close()
+          decodePending--
+          if (extractionDone && decodePending === 0) finalize()
+        },
+        error: (e: any) => reject(new Error(`AudioDecoder error: ${e}`)),
+      })
+
+      audioDecoder.configure({
+        codec: audioTrack.codec,
+        sampleRate: audioTrack.audio?.sample_rate ?? 48000,
+        numberOfChannels: audioTrack.audio?.channel_count ?? 2,
+      })
+
+      mp4.setExtractionOptions(audioTrackId!, null, { nbSamples: 100 })
+      mp4.start()
     }
-    // Concat all parts into one buffer
-    const total = parts.reduce((s, p) => s + p.byteLength, 0)
-    const merged = new Uint8Array(total)
-    let pos = 0
-    for (const p of parts) { merged.set(new Uint8Array(p), pos); pos += p.byteLength }
-    progress(20, "Décodage audio…")
-    audioBuffer = await audioCtx.decodeAudioData(merged.buffer)
-  }
 
-  progress(35, "Conversion mono 16kHz…")
-
-  // Mix down to mono
-  const sampleRate = audioBuffer.sampleRate // already 16000 since we set it on AudioContext
-  const numChannels = audioBuffer.numberOfChannels
-  const length = audioBuffer.length
-  const mono = new Float32Array(length)
-
-  for (let ch = 0; ch < numChannels; ch++) {
-    const channelData = audioBuffer.getChannelData(ch)
-    for (let i = 0; i < length; i++) {
-      mono[i] += channelData[i] / numChannels
+    mp4.onSamples = (_id: number, _user: any, samples: any[]) => {
+      for (const sample of samples) {
+        decodePending++
+        audioDecoder!.decode(new EncodedAudioChunk({
+          type: sample.is_sync ? "key" : "delta",
+          timestamp: (sample.cts * 1_000_000) / sample.timescale,
+          duration: (sample.duration * 1_000_000) / sample.timescale,
+          data: sample.data,
+        }))
+      }
     }
-  }
 
-  await audioCtx.close()
+    mp4.onFlush = async () => {
+      extractionDone = true
+      if (decodePending === 0) finalize()
+    }
 
-  progress(50, "Découpage en chunks…")
+    mp4.onError = (e: any) => reject(new Error(`MP4Box error: ${e}`))
 
-  // Split into chunks and encode each as WAV
-  const samplesPerChunk = chunkSec * sampleRate
-  const numChunks = Math.ceil(length / samplesPerChunk)
-  const chunks: AudioChunk[] = []
+    // Feed file in 4MB slices
+    const SLICE = 4 * 1024 * 1024
+    let offset = 0
 
-  for (let i = 0; i < numChunks; i++) {
-    const start = i * samplesPerChunk
-    const end = Math.min(start + samplesPerChunk, length)
-    const chunkSamples = mono.slice(start, end)
-    const wav = encodeWav(chunkSamples, sampleRate)
+    const feedNext = async () => {
+      if (offset >= file.size) {
+        mp4.flush()
+        return
+      }
+      const end = Math.min(offset + SLICE, file.size)
+      const buf = await file.slice(offset, end).arrayBuffer() as any
+      buf.fileStart = offset
+      mp4.appendBuffer(buf)
+      offset = end
+      progress(5 + Math.round((offset / file.size) * 55), "Extraction audio…")
+      setTimeout(feedNext, 0)
+    }
 
-    chunks.push({
-      data: wav,
-      offsetSec: i * chunkSec,
-      durationSec: (end - start) / sampleRate,
-      index: i,
-    })
+    feedNext()
 
-    progress(50 + Math.round(((i + 1) / numChunks) * 45), `Chunk ${i + 1}/${numChunks}…`)
-  }
+    const finalize = async () => {
+      progress(65, "Assemblage audio…")
 
-  progress(100, "Prêt")
-  return chunks
+      // Merge all Float32 chunks into one big array
+      const merged = new Float32Array(totalSamples)
+      let pos = 0
+      for (const s of allSamples) { merged.set(s, pos); pos += s.length }
+      allSamples = []
+
+      // Resample to 16kHz if needed (simple linear interpolation)
+      const sourceSampleRate = (mp4 as any).moov?.traks?.[0]?.mdia?.mdhd?.timescale ?? 48000
+      const resampledLength = Math.ceil(totalSamples * (sampleRate / sourceSampleRate))
+      const resampled = new Float32Array(resampledLength)
+      const ratio = totalSamples / resampledLength
+      for (let i = 0; i < resampledLength; i++) {
+        resampled[i] = merged[Math.min(Math.floor(i * ratio), totalSamples - 1)]
+      }
+
+      progress(75, "Découpage en chunks…")
+
+      // Split into WAV chunks
+      const samplesPerChunk = chunkSec * sampleRate
+      const numChunks = Math.ceil(resampled.length / samplesPerChunk)
+      const chunks: AudioChunk[] = []
+
+      for (let i = 0; i < numChunks; i++) {
+        const start = i * samplesPerChunk
+        const end = Math.min(start + samplesPerChunk, resampled.length)
+        const slice = resampled.slice(start, end)
+        chunks.push({
+          data: encodeWav(slice, sampleRate),
+          offsetSec: i * chunkSec,
+          durationSec: (end - start) / sampleRate,
+          index: i,
+        })
+        progress(75 + Math.round(((i + 1) / numChunks) * 20), `Chunk ${i + 1}/${numChunks}…`)
+      }
+
+      progress(100, "Prêt")
+      resolve(chunks)
+    }
+  })
 }
 
-/** Encode a Float32Array of mono PCM samples as a WAV file (16-bit PCM) */
 function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
-  const numSamples = samples.length
-  const bytesPerSample = 2 // 16-bit
-  const blockAlign = bytesPerSample
-  const byteRate = sampleRate * blockAlign
-  const dataSize = numSamples * bytesPerSample
-  const bufferSize = 44 + dataSize
-
-  const buf = new ArrayBuffer(bufferSize)
+  const dataSize = samples.length * 2
+  const buf = new ArrayBuffer(44 + dataSize)
   const view = new DataView(buf)
-
-  // RIFF header
-  writeStr(view, 0, "RIFF")
-  view.setUint32(4, 36 + dataSize, true)
-  writeStr(view, 8, "WAVE")
-  writeStr(view, 12, "fmt ")
-  view.setUint32(16, 16, true)       // PCM chunk size
-  view.setUint16(20, 1, true)        // PCM format
-  view.setUint16(22, 1, true)        // mono
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, byteRate, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, 16, true)       // bits per sample
-  writeStr(view, 36, "data")
-  view.setUint32(40, dataSize, true)
-
-  // PCM samples — clamp float32 to int16
-  let offset = 44
-  for (let i = 0; i < numSamples; i++) {
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, "RIFF"); view.setUint32(4, 36 + dataSize, true); w(8, "WAVE")
+  w(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true); w(36, "data"); view.setUint32(40, dataSize, true)
+  let o = 44
+  for (let i = 0; i < samples.length; i++) {
     const s = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(offset, s < 0 ? s * 32768 : s * 32767, true)
-    offset += 2
+    view.setInt16(o, s < 0 ? s * 32768 : s * 32767, true); o += 2
   }
-
   return new Uint8Array(buf)
-}
-
-function writeStr(view: DataView, offset: number, str: string) {
-  for (let i = 0; i < str.length; i++) {
-    view.setUint8(offset + i, str.charCodeAt(i))
-  }
 }
