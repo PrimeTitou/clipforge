@@ -12,17 +12,12 @@ const BRAND = "Clip Fortress"
 
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("idle")
-  const [title, setTitle] = useState("")
   const [job, setJob] = useState<Job | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [uploadPct, setUploadPct] = useState(0)
   const [prepLabel, setPrepLabel] = useState("")
 
   const handleFile = useCallback(async (file: File) => {
-    if (!title.trim()) {
-      setErr("Donne d'abord un titre à ta vidéo.")
-      return
-    }
     setErr(null)
     setPhase("preparing")
     setUploadPct(0)
@@ -63,7 +58,6 @@ export default function HomePage() {
           id: jobId,
           storage_path: prefix,
           filename: file.name,
-          title: title.trim(),
           status: "pending",
           progress: 5,
         })
@@ -74,14 +68,14 @@ export default function HomePage() {
       setPhase("processing")
 
       supabase.functions
-        .invoke("process-vod", { body: { job_id: jobId, chunks: chunkPaths, title: title.trim() } })
+        .invoke("process-vod", { body: { job_id: jobId, chunks: chunkPaths } })
         .catch((e) => console.error("invoke error", e))
     } catch (e: any) {
       console.error(e)
       setErr(e.message ?? String(e))
       setPhase("error")
     }
-  }, [title])
+  }, [])
 
   const onDrop = useCallback((files: File[]) => {
     if (files[0]) handleFile(files[0])
@@ -114,7 +108,6 @@ export default function HomePage() {
     setJob(null)
     setErr(null)
     setUploadPct(0)
-    setTitle("")
   }
 
   const isLanding = phase === "idle" || phase === "error"
@@ -139,20 +132,10 @@ export default function HomePage() {
           <div className="appear-3 w-full max-w-2xl">
             {isLanding && (
               <>
-                <div className="mb-4">
-                  <input
-                    type="text"
-                    placeholder="Titre envisagé pour ta vidéo (ex: J'ai trouvé le meilleur spot de SOT)"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-5 py-3 rounded-xl border border-neutral-200 bg-white/80 backdrop-blur focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition text-sm"
-                  />
-                </div>
                 <Dropzone
                   getRootProps={getRootProps}
                   getInputProps={getInputProps}
                   isDragActive={isDragActive}
-                  disabled={!title.trim()}
                 />
                 {err && (
                   <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
@@ -193,29 +176,23 @@ export default function HomePage() {
   )
 }
 
-function Dropzone({ getRootProps, getInputProps, isDragActive, disabled }: any) {
+function Dropzone({ getRootProps, getInputProps, isDragActive }: any) {
   return (
     <div
       {...getRootProps()}
       className={`relative rounded-2xl border-2 border-dashed p-8 transition-all ${
-        disabled
-          ? "border-neutral-200 bg-neutral-50/50 cursor-not-allowed opacity-60"
-          : isDragActive
+        isDragActive
           ? "border-emerald-400 bg-emerald-50 scale-[1.02] cursor-pointer"
           : "border-neutral-200 bg-white/70 backdrop-blur hover:border-emerald-300 hover:bg-white cursor-pointer"
       }`}
     >
-      <input {...getInputProps()} disabled={disabled} />
+      <input {...getInputProps()} />
       <div className="flex flex-col items-center gap-2">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-100 flex items-center justify-center">
           <Upload className="w-5 h-5 text-emerald-600" strokeWidth={2.25} />
         </div>
         <div className="font-medium text-neutral-900">
-          {disabled
-            ? "Entre un titre d'abord"
-            : isDragActive
-            ? "Lâche ton fichier"
-            : "Glisse ta VOD ou clique"}
+          {isDragActive ? "Lâche ton fichier" : "Glisse ta VOD ou clique"}
         </div>
         <div className="text-xs text-neutral-500">video / audio · jusqu'à 5 Go</div>
       </div>
