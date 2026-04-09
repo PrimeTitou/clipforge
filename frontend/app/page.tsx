@@ -321,7 +321,7 @@ function ScriptView({ job, onReset }: { job: Job; onReset: () => void }) {
                 <h2 className="font-semibold text-sm text-neutral-900">{s.title}</h2>
               </div>
             )}
-            <div className="text-[14px] leading-relaxed text-neutral-700 whitespace-pre-wrap">{s.body.trim()}</div>
+            <div className="text-[14px] leading-relaxed text-neutral-700 whitespace-pre-wrap">{s.body.trim().replace(/\*+/g, "")}</div>
           </div>
         ))}
       </div>
