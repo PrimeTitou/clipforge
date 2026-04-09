@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useDropzone } from "react-dropzone"
-import { Zap, Target, Sparkles, Upload, FileText, Copy, Check } from "lucide-react"
+import { Zap, Target, Sparkles, Upload, FileText, Copy, Check, AlignLeft, Crosshair, Lightbulb, Anchor, MapPin, MessageSquare, Shuffle, PenLine } from "lucide-react"
 import { supabase, type Job } from "@/lib/supabase"
 import { extractAndChunkAudio } from "@/lib/ffmpeg"
 
@@ -238,6 +238,38 @@ function ProcessingCard({ job }: { job: Job }) {
   )
 }
 
+const SECTION_ICONS: Record<string, React.ReactNode> = {
+  "Résumé":          <AlignLeft className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Angle":           <Crosshair className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Idées de titres": <Lightbulb className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Hooks d'intro":   <Anchor className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Moments clés":    <MapPin className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Punchlines":      <MessageSquare className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Transitions":     <Shuffle className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+  "Pistes de script":<PenLine className="w-4 h-4 text-emerald-600" strokeWidth={2} />,
+}
+
+function parseScript(raw: string) {
+  const lines = raw.split("\n")
+  const sections: { title: string; body: string }[] = []
+  let current: { title: string; body: string } | null = null
+
+  for (const line of lines) {
+    const match = line.match(/^#{1,3}\s+(.+)$/)
+    if (match) {
+      if (current) sections.push(current)
+      current = { title: match[1].trim(), body: "" }
+    } else {
+      if (current) current.body += (current.body ? "\n" : "") + line
+      else if (line.trim()) {
+        current = { title: "", body: line }
+      }
+    }
+  }
+  if (current) sections.push(current)
+  return sections
+}
+
 function ScriptView({ job, onReset }: { job: Job; onReset: () => void }) {
   const [copied, setCopied] = useState(false)
 
@@ -248,6 +280,8 @@ function ScriptView({ job, onReset }: { job: Job; onReset: () => void }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const sections = parseScript(job.script ?? "")
+
   return (
     <section className="relative z-10 max-w-4xl w-full mx-auto px-6 py-10">
       <div className="flex items-center justify-between mb-6">
@@ -256,7 +290,6 @@ function ScriptView({ job, onReset }: { job: Job; onReset: () => void }) {
             <FileText className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-xl text-neutral-900">{job.title}</h1>
             <p className="text-xs text-neutral-500">{job.filename}</p>
           </div>
         </div>
@@ -277,9 +310,21 @@ function ScriptView({ job, onReset }: { job: Job; onReset: () => void }) {
         </div>
       </div>
 
-      <article className="rounded-2xl border border-neutral-200 bg-white/90 backdrop-blur p-8 shadow-sm prose-script">
-        <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-neutral-800">{job.script}</pre>
-      </article>
+      <div className="flex flex-col gap-4">
+        {sections.map((s, i) => (
+          <div key={i} className="rounded-2xl border border-neutral-200 bg-white/90 backdrop-blur px-7 py-5 shadow-sm">
+            {s.title && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
+                  {SECTION_ICONS[s.title] ?? <FileText className="w-4 h-4 text-emerald-600" strokeWidth={2} />}
+                </div>
+                <h2 className="font-semibold text-sm text-neutral-900">{s.title}</h2>
+              </div>
+            )}
+            <div className="text-[14px] leading-relaxed text-neutral-700 whitespace-pre-wrap">{s.body.trim()}</div>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
