@@ -31,10 +31,6 @@ export interface AudioChunk {
   index: number
 }
 
-/**
- * Extract audio from a video file and split it into ~10min mp3 chunks at 32kbps mono.
- * Returns an array of chunks with their time offsets.
- */
 export async function extractAndChunkAudio(
   file: File,
   opts: {
@@ -42,38 +38,53 @@ export async function extractAndChunkAudio(
     onProgress?: (pct: number, label: string) => void
   } = {}
 ): Promise<AudioChunk[]> {
-  const chunkSec = opts.chunkSec ?? 600 // 10 min
+  const chunkSec = opts.chunkSec ?? 600
   const progress = opts.onProgress ?? (() => {})
 
   progress(0, "Chargement de FFmpeg…")
   const ff = await getFFmpeg()
 
   progress(5, "Lecture du fichier…")
-  const inputName = "input" + (file.name.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ".mp4")
+  const ext = file.name.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ".mp4"
+  const inputName = "input" + ext
   await ff.writeFile(inputName, await fetchFile(file))
 
+  // Step 1: Extract full audio as a single mp3 — more compatible than direct segmenting
   progress(10, "Extraction audio…")
   ff.on("progress", ({ progress: p }) => {
-    const pct = 10 + Math.min(60, Math.max(0, p * 60))
+    const pct = 10 + Math.min(50, Math.max(0, p * 50))
     progress(pct, "Extraction audio…")
   })
 
-  // Extract full audio as mp3 32kbps mono, then segment it.
   await ff.exec([
     "-i", inputName,
     "-vn",
     "-ac", "1",
     "-ar", "16000",
     "-b:a", "32k",
+    "-y",
+    "full_audio.mp3",
+  ])
+
+  try { await ff.deleteFile(inputName) } catch {}
+
+  // Step 2: Get duration via probing the file size (estimate) then segment
+  progress(62, "Découpage en chunks…")
+
+  await ff.exec([
+    "-i", "full_audio.mp3",
     "-f", "segment",
     "-segment_time", String(chunkSec),
+    "-c", "copy",
     "-reset_timestamps", "1",
+    "-y",
     "chunk_%03d.mp3",
   ])
 
-  progress(75, "Découpage…")
+  try { await ff.deleteFile("full_audio.mp3") } catch {}
 
-  // List produced files
+  progress(75, "Lecture des chunks…")
+
   const files: any = await ff.listDir("/")
   const chunkFiles: string[] = (files as any[])
     .filter((f: any) => !f.isDir && /^chunk_\d+\.mp3$/.test(f.name))
@@ -93,8 +104,6 @@ export async function extractAndChunkAudio(
     await ff.deleteFile(name)
     progress(75 + ((i + 1) / chunkFiles.length) * 20, `Chunk ${i + 1}/${chunkFiles.length}`)
   }
-
-  try { await ff.deleteFile(inputName) } catch {}
 
   progress(100, "Prêt")
   return chunks
