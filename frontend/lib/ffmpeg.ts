@@ -47,8 +47,21 @@ export async function extractAndChunkAudio(
   progress(5, "Lecture du fichier…")
   const ext = file.name.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ".mp4"
   const inputName = "input" + ext
-  const arrayBuf = await file.arrayBuffer()
-  await ff.writeFile(inputName, new Uint8Array(arrayBuf))
+
+  // Stream the file in chunks to avoid OOM on large files
+  const CHUNK = 64 * 1024 * 1024 // 64 MB slices
+  const total = file.size
+  const parts: Uint8Array[] = []
+  for (let offset = 0; offset < total; offset += CHUNK) {
+    const slice = file.slice(offset, Math.min(offset + CHUNK, total))
+    const buf = await slice.arrayBuffer()
+    parts.push(new Uint8Array(buf))
+    progress(5 + Math.round((offset / total) * 5), "Lecture du fichier…")
+  }
+  const fullBuf = new Uint8Array(total)
+  let pos = 0
+  for (const part of parts) { fullBuf.set(part, pos); pos += part.length }
+  await ff.writeFile(inputName, fullBuf)
 
   // Step 1: Extract full audio as a single mp3 — more compatible than direct segmenting
   progress(10, "Extraction audio…")
