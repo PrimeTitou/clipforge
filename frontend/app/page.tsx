@@ -8,7 +8,7 @@ import { extractAndChunkAudio } from "@/lib/ffmpeg"
 
 type Phase = "idle" | "preparing" | "uploading" | "processing" | "done" | "error"
 
-const BRAND = "Clip Fortress"
+const BRAND = "Script Fortress"
 
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("idle")

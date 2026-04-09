@@ -1,7 +1,7 @@
 import "./globals.css"
 
 export const metadata = {
-  title: "Clip Fortress — Transforme tes VODs en scripts",
+  title: "Script Fortress",
   description: "Upload ta VOD, récupère un script complet avec angles, hooks et moments clés.",
   icons: { icon: "/icon.svg" },
 }
