@@ -47,7 +47,8 @@ export async function extractAndChunkAudio(
   progress(5, "Lecture du fichier…")
   const ext = file.name.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ".mp4"
   const inputName = "input" + ext
-  await ff.writeFile(inputName, await fetchFile(file))
+  const arrayBuf = await file.arrayBuffer()
+  await ff.writeFile(inputName, new Uint8Array(arrayBuf))
 
   // Step 1: Extract full audio as a single mp3 — more compatible than direct segmenting
   progress(10, "Extraction audio…")
